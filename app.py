@@ -13,6 +13,8 @@ from dotenv import load_dotenv
 from langfuse import Langfuse
 from langfuse.decorators import observe, langfuse_context
 from langfuse.openai import OpenAI
+# Dodatek: błąd zwracany przez OpenAI przy złym kluczu - wziąłem z dokumentacji biblioteki openai (obsługa błędów)
+from openai import AuthenticationError
 
 # Model wczytuję tak jak w lekcji 24__in_search_of_the_best_model__pycaret_flow.ipynb
 from pycaret.regression import load_model, predict_model
@@ -256,6 +258,11 @@ st.markdown(
 # Dodatek: zabezpieczenie klucza OpenAI - wziąłem je z modułu 7
 # (07__audio_notes_v3__protecting_openai_api_key.py i 25__app.py z wdrażania aplikacji Notatki).
 # Jeśli nie ma klucza w zmiennych środowiskowych, pokazuję pole, w którym można wpisać swój
+
+# Dodatek: gdy OpenAI odrzuci klucz, pokazuję krótki komunikat zamiast długiego błędu technicznego
+if st.session_state.get("bad_api_key"):
+    st.error("Nieprawidłowy klucz API OpenAI. Sprawdź go i wpisz ponownie.")
+
 if not st.session_state.get("openai_api_key"):
     if "OPENAI_API_KEY" in os.environ:
         st.session_state["openai_api_key"] = os.environ["OPENAI_API_KEY"]
@@ -264,6 +271,8 @@ if not st.session_state.get("openai_api_key"):
         st.info("Dodaj swój klucz API OpenAI aby móc korzystać z tej aplikacji")
         st.session_state["openai_api_key"] = st.text_input("Klucz API", type="password")
         if st.session_state["openai_api_key"]:
+            # nowy klucz wpisany - chowam komunikat o złym kluczu
+            st.session_state["bad_api_key"] = False
             st.rerun()
 
 if not st.session_state.get("openai_api_key"):
@@ -280,8 +289,16 @@ if st.button("Oszacuj czas", type="primary"):
         st.warning("Najpierw napisz coś o sobie :)")
     else:
         with st.spinner("Analizuję Twoją wiadomość..."):
-            st.session_state["data"] = get_data_from_intro(intro)
-            st.session_state["feedback_sent"] = False
+            # Dodatek: przy złym kluczu czyszczę go i wracam do pola "Klucz API"
+            try:
+                st.session_state["data"] = get_data_from_intro(intro)
+                st.session_state["feedback_sent"] = False
+                st.session_state["bad_api_key"] = False
+            except AuthenticationError:
+                st.session_state["openai_api_key"] = None
+                st.session_state["data"] = None
+                st.session_state["bad_api_key"] = True
+                st.rerun()
 
 data = st.session_state.get("data")
 if data:
