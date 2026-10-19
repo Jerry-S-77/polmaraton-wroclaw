@@ -19,8 +19,6 @@ from pycaret.regression import load_model, predict_model
 
 load_dotenv()
 
-openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-
 #
 # USTAWIENIA
 #
@@ -143,6 +141,12 @@ In this case the dictionary should look like this:
 """
 
 
+# Klient OpenAI biorę z session_state - tak jak w module 7
+# (07__audio_notes_v3__protecting_openai_api_key.py)
+def get_openai_client():
+    return OpenAI(api_key=st.session_state["openai_api_key"])
+
+
 @observe()
 def get_data_from_intro(intro, model=LLM_MODEL):
     messages = [
@@ -155,6 +159,7 @@ def get_data_from_intro(intro, model=LLM_MODEL):
             "content": f"```{intro}```",
         },
     ]
+    openai_client = get_openai_client()
     chat_completion = openai_client.chat.completions.create(
         response_format={"type": "json_object"},
         messages=messages,
@@ -225,7 +230,7 @@ def predict_halfmarathon_time(model, data):
     return prediction_df["prediction_label"].iloc[0]
 
 
-# Dodatek: ocena użytkownika (kciuk w górę / w dół) jako druga metryka w Langfuse
+# Dodatek: ocena użytkownika (Tak / Nie) jako druga metryka w Langfuse
 def send_user_feedback(trace_id, value):
     # Ocenę użytkownika zapisuję w Langfuse tak jak langfuse.score w lekcji 33
     Langfuse().score(
@@ -248,9 +253,25 @@ st.markdown(
     "Na tej podstawie oszacuję Twój czas na półmaratonie (21,0975 km)."
 )
 
+# Dodatek: zabezpieczenie klucza OpenAI - wziąłem je z modułu 7
+# (07__audio_notes_v3__protecting_openai_api_key.py i 25__app.py z wdrażania aplikacji Notatki).
+# Jeśli nie ma klucza w zmiennych środowiskowych, pokazuję pole, w którym można wpisać swój
+if not st.session_state.get("openai_api_key"):
+    if "OPENAI_API_KEY" in os.environ:
+        st.session_state["openai_api_key"] = os.environ["OPENAI_API_KEY"]
+
+    else:
+        st.info("Dodaj swój klucz API OpenAI aby móc korzystać z tej aplikacji")
+        st.session_state["openai_api_key"] = st.text_input("Klucz API", type="password")
+        if st.session_state["openai_api_key"]:
+            st.rerun()
+
+if not st.session_state.get("openai_api_key"):
+    st.stop()
+
 intro = st.text_area(
     "Kilka słów o Tobie",
-    placeholder="Np. Cześć, jestem Kasia, mam 34 lata, a 5 km przebiegam w 28 minut.",
+    placeholder="Np. Hej, tu Jerzy z Wrocławia. Biegam od kilku lat, mam 50 lat, a 5 km zajmuje mi około 27 minut.",
     height=150,
 )
 
@@ -308,8 +329,8 @@ if data:
         st.write("Czy poprawnie odczytałem Twoje dane?")
         c0, c1, _ = st.columns([1, 1, 3])
         with c0:
-            st.button("👍 Tak", on_click=send_user_feedback, args=(data["trace_id"], 1))
+            st.button("✅ Tak", on_click=send_user_feedback, args=(data["trace_id"], 1))
         with c1:
-            st.button("👎 Nie", on_click=send_user_feedback, args=(data["trace_id"], 0))
+            st.button("❌ Nie", on_click=send_user_feedback, args=(data["trace_id"], 0))
     elif st.session_state.get("feedback_sent"):
         st.caption("Dzięki za ocenę!")
