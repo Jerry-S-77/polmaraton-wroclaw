@@ -1,0 +1,10 @@
+.env
+models/
+*.pkl
+logs.log
+catboost_info/
+mlruns/
+__pycache__/
+.ipynb_checkpoints/
+.vscode/
+41__zadanie_domowe.ipynb
